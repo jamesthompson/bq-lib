@@ -1,0 +1,31 @@
+name:                big-query-lib
+version:             0.1.0.0
+synopsis:            Assorted helper utilities for BigQuery
+description:         Assorted helper utilities for BigQuery, inc. parsers, querying, paging results
+homepage:            https://github.com/jamesthompson/big-query-lib.git
+license:             AllRightsReserved
+license-file:        LICENSE
+author:              James R. Thompson
+maintainer:          jamesthompsonoxford@gmail.com
+copyright:           James R. Thompson
+category:            Data
+build-type:          Simple
+extra-source-files:  CHANGELOG.md
+cabal-version:       >=1.10
+
+library
+  exposed-modules:   BigQuery
+  build-depends:     base >=4.11 && <5
+                   , aeson
+                   , generics-sop
+                   , gogol
+                   , gogol-core
+                   , gogol-bigquery
+                   , lens
+                   , machines
+                   , string-qq
+                   , text
+                   , time
+  hs-source-dirs:    src
+  default-language:  Haskell2010
+  ghc-options:       -Wall

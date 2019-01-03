@@ -13,14 +13,17 @@ let
 
   haskellPackages = pkgs.haskell.packages.${compiler}.override {
     overrides = self: super: {
+      gogol = haskellPackages.callPackage ./nix/gogol.nix {};
+      gogol-core = haskellPackages.callPackage ./nix/gogol-core.nix {};
+      gogol-bigquery = pkgs.haskell.lib.dontHaddock (haskellPackages.callPackage ./nix/gogol-bigquery.nix {});
     };
   };
 
-  libRelease = haskellPackages.callCabal2nix "big-query-lib" ./lib {};
+  libRelease = haskellPackages.callCabal2nix "bq-lib" ./lib {};
   libDev = pkgs.haskell.lib.dontHaddock libRelease;
 
 in {
-  big-query-lib = libRelease;
+  bq-lib = libRelease;
   shell = haskellPackages.shellFor {
     withHoogle = true;
     packages = p: [libDev];

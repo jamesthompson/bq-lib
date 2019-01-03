@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE DeriveGeneric       #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
@@ -18,12 +19,22 @@ import           Control.Lens                                          (Lens',
                                                                         (<&>),
                                                                         (?~),
                                                                         (^.))
-import           Data.Aeson                                            (Value)
+import           Data.Aeson                                            (Result,
+                                                                        Value)
+import           Data.Maybe                                            (fromMaybe)
 import           Data.Monoid                                           ((<>))
-import           Data.Proxy
+import           Data.Proxy                                            (Proxy (..))
 import           Data.Text                                             (Text)
+import           Generics.SOP                                          (All,
+                                                                        Code,
+                                                                        Generic,
+                                                                        NS (..),
+                                                                        SOP (..),
+                                                                        fromList,
+                                                                        hctraverse,
+                                                                        to, unK)
 import           Network.Google                                        (HasScope,
-                                                                        LogLevel (Info),
+                                                                        LogLevel (Debug),
                                                                         MonadGoogle,
                                                                         envLogger,
                                                                         envScopes,
@@ -32,7 +43,21 @@ import           Network.Google                                        (HasScope
                                                                         runGoogle,
                                                                         runResourceT,
                                                                         send)
-import           Network.Google.BigQuery.Types
+import           Network.Google.BigQuery.Types                         (QueryRequest,
+                                                                        TableRow,
+                                                                        gqrrPageToken,
+                                                                        gqrrRows,
+                                                                        jrJobId,
+                                                                        jrProjectId,
+                                                                        qJobReference,
+                                                                        qPageToken,
+                                                                        qRows,
+                                                                        qrQuery,
+                                                                        qrUseLegacySQL,
+                                                                        qrUseQueryCache,
+                                                                        queryRequest,
+                                                                        tcV,
+                                                                        trF)
 import           Network.Google.Resource.BigQuery.Jobs.GetQueryResults (jgqrPageToken,
                                                                         jobsGetQueryResults)
 import           Network.Google.Resource.BigQuery.Jobs.Query           (JobsQuery,
@@ -84,14 +109,20 @@ mkStdSqlRequest sql =
                & qrUseLegacySQL  .~ False
                & qrQuery         ?~ sql
 
--- | Utility function to test queries and parsers
+-- | Utility function to test queries
 testQuery
   :: Text
+    -- ^ GCP Project Name
+  -> Text
+    -- ^ Query SQL
   -> IO [[Maybe Value]]
-testQuery query = do
-  lgr <- newLogger Info stdout
+testQuery projectName query = do
+  lgr <- newLogger Debug stdout
   env <- newEnv <&> (envLogger .~ lgr) . (envScopes .~ (Proxy :: Proxy BigQueryScope))
-  runResourceT . runGoogle env $ stdSqlRequest "parsley-data" query
+  runResourceT . runGoogle env $ stdSqlRequest projectName query
+
+
+-- * Generic Product Type Parsing -----------------------------------------------
 
 class BigQueryColumn a where
   parseCol :: Maybe Value -> Result a
@@ -103,7 +134,7 @@ parseBigQueryColumns
   => [Maybe Value]
   -> Result a
 parseBigQueryColumns vs =
-  fromMaybe (fail ("Unexpected number of columns in row: " ++ show vs)) $
+  fromMaybe (fail ("Unexpected column data in row: " ++ show vs)) $
    fmap (to . SOP . Z) <$>
     hctraverse (Proxy @BigQueryColumn) (parseCol . unK) <$>
      fromList vs

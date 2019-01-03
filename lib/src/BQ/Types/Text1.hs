@@ -1,5 +1,6 @@
-{-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module BQ.Types.Text1
   ( Text1
@@ -57,7 +58,7 @@ text1BigQueryTypeError :: MonadFail m => m a
 text1BigQueryTypeError =
   fail "Expecting a field : String representing a Text1 value"
 
-instance BigQueryColumnParser Text1 where
+instance MonadFail m => BigQueryColumnParser m Text1 where
   parseCol (Just (String t)) =
     maybe text1BigQueryNullError pure (preview _Text1 t)
   parseCol (Just _)          =
@@ -65,7 +66,7 @@ instance BigQueryColumnParser Text1 where
   parseCol Nothing           =
     fail text1BigQueryNullError
 
-instance BigQueryColumnParser (Maybe Text1) where
+instance MonadFail m => BigQueryColumnParser m (Maybe Text1) where
   parseCol (Just (String t)) =
     maybe (pure Nothing) (pure . Just) (preview _Text1 t)
   parseCol (Just Null)       = pure Nothing

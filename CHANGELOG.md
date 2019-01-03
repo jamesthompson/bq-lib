@@ -1,5 +1,5 @@
 # Revision history for big-query-lib
 
-## 0.1.0.0 -- 2018-12-02
+## 0.1.0.0 -- 2019-01-03
 
-* Started thinking about this seriously
+* First release to github

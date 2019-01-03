@@ -6,6 +6,7 @@ module BQ.Types.Text1
   , _Text1
   ) where
 
+import           BQ.Parsing          (BigQueryColumnParser (..))
 import           Control.Lens.Fold   (preview)
 import           Control.Lens.Prism  (Prism', prism')
 import           Control.Lens.Review (review)
@@ -47,4 +48,27 @@ instance {-# OVERLAPPING #-} FromJSON (Maybe Text1) where
 
 instance ToJSON Text1 where
   toJSON = String . review _Text1
+
+text1BigQueryNullError :: MonadFail m => m a
+text1BigQueryNullError =
+  fail "Expecting non-null Text1 value"
+
+text1BigQueryTypeError :: MonadFail m => m a
+text1BigQueryTypeError =
+  fail "Expecting a field : String representing a Text1 value"
+
+instance BigQueryColumnParser Text1 where
+  parseCol (Just (String t)) =
+    maybe text1BigQueryNullError pure (preview _Text1 t)
+  parseCol (Just _)          =
+    fail text1BigQueryTypeError
+  parseCol Nothing           =
+    fail text1BigQueryNullError
+
+instance BigQueryColumnParser (Maybe Text1) where
+  parseCol (Just (String t)) =
+    maybe (pure Nothing) (pure . Just) (preview _Text1 t)
+  parseCol (Just Null)       = pure Nothing
+  parseCol (Just _)          = fail text1BigQueryTypeError
+  parseCol Nothing           = pure Nothing
 

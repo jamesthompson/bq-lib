@@ -12,6 +12,7 @@ import           Data.Proxy        (Proxy (..))
 import           Generics.SOP      (All, Code, Generic, NS (..), SOP (..),
                                     fromList, hctraverse, to, unK)
 
+
 -- * Generic BigQuery Row to Product Type Parsing -------------------------------
 
 class BigQueryColumnParser a where

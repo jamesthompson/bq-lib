@@ -21,8 +21,9 @@ import           Control.Lens                                          (Lens',
                                                                         (^.))
 import           Data.Aeson                                            (Result,
                                                                         Value)
+import           Data.Machine                                          hiding
+                                                                        (Z)
 import           Data.Maybe                                            (fromMaybe)
-import           Data.Monoid                                           ((<>))
 import           Data.Proxy                                            (Proxy (..))
 import           Data.Text                                             (Text)
 import           Generics.SOP                                          (All,
@@ -65,39 +66,41 @@ import           Network.Google.Resource.BigQuery.Jobs.Query           (JobsQuer
 import           System.IO                                             (stdout)
 
 
+-- * Gogol / BigQuery Machinery -------------------------------------------------
+
+-- | Gogol Scope
 type BigQueryScope =
   '[ "https://www.googleapis.com/auth/bigquery"
    , "https://www.googleapis.com/auth/cloud-platform"
    , "https://www.googleapis.com/auth/cloud-platform.read-only" ]
 
+-- | A BigQueryRow is a list of Maybe Value in Gogol
+type BigQueryRow = [Maybe Value]
+
 extractRowsAsJson
   :: Lens' a [TableRow]
   -> a
-  -> [[Maybe Value]]
+  -> [BigQueryRow]
 extractRowsAsJson tableRowsExtractionLens =
   fmap (fmap (view tcV)) . toListOf (tableRowsExtractionLens . traverse . trF)
 
--- | Pages results from the BigQuery API lazily building a list of
---   JSON results, where a row = [Maybe Value]
+-- | Machines source for for the given project id and query from the BigQuery API
 stdSqlRequest
   :: ( MonadGoogle BigQueryScope m,
        HasScope BigQueryScope JobsQuery)
   => Text
-  -- ^ Project ID, i.e. `parsley-data`
+  -- ^ GCP Project Name
   -> Text
   -- ^ Query SQL
-  -> m [[Maybe Value]]
-stdSqlRequest projectId sql = do
+  -> SourceT m BigQueryRow
+stdSqlRequest projectId sql = (flattened <~) . MachineT $ do
   initRes <- send (jobsQuery (mkStdSqlRequest sql) projectId)
   let initRows = extractRowsAsJson qRows initRes
-  case (,) <$> initRes^.qJobReference <*> initRes^.qPageToken of
-    Just (jr, pt) -> (<>) initRows <$> iter jr (Just pt)
-    Nothing       -> pure initRows
-  where iter jr pt = do
+  return $ Yield initRows (iter (initRes^.qJobReference) (initRes^.qPageToken))
+  where iter (Just jr) pt@(Just _) = MachineT $ do
           res <- send (jobsGetQueryResults (jr^.jrJobId.non "") (jr^.jrProjectId.non "") & jgqrPageToken .~ pt)
-          case res^.gqrrPageToken of
-            Just pt' -> (<>) (extractRowsAsJson gqrrRows res) <$> iter jr (Just pt')
-            Nothing  -> return $ extractRowsAsJson gqrrRows res
+          return $ Yield (extractRowsAsJson gqrrRows res) (iter (Just jr) (res^.gqrrPageToken))
+        iter _         _           = MachineT $ return Stop
 
 -- | Build a standard SQL request for use in stdSqlRequest
 mkStdSqlRequest
@@ -115,14 +118,14 @@ testQuery
     -- ^ GCP Project Name
   -> Text
     -- ^ Query SQL
-  -> IO [[Maybe Value]]
+  -> IO [BigQueryRow]
 testQuery projectName query = do
   lgr <- newLogger Debug stdout
   env <- newEnv <&> (envLogger .~ lgr) . (envScopes .~ (Proxy :: Proxy BigQueryScope))
-  runResourceT . runGoogle env $ stdSqlRequest projectName query
+  runResourceT . runGoogle env . runT $ stdSqlRequest projectName query
 
 
--- * Generic Product Type Parsing -----------------------------------------------
+-- * Generic BigQuery Row to Product Type Parsing -------------------------------
 
 class BigQueryColumn a where
   parseCol :: Maybe Value -> Result a
@@ -131,10 +134,11 @@ parseBigQueryColumns
   :: ( Generic a
      , Code a ~ '[xs]
      , All BigQueryColumn xs )
-  => [Maybe Value]
+  => BigQueryRow
   -> Result a
 parseBigQueryColumns vs =
   fromMaybe (fail ("Unexpected column data in row: " ++ show vs)) $
    fmap (to . SOP . Z) <$>
     hctraverse (Proxy @BigQueryColumn) (parseCol . unK) <$>
      fromList vs
+

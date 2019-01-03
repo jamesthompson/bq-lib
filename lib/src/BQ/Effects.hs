@@ -80,11 +80,11 @@ stdSqlRequest
 stdSqlRequest projectId sql = (flattened <~) . MachineT $ do
   initRes <- send (jobsQuery (mkStdSqlRequest sql) projectId)
   let initRows = extractRowsAsJson qRows initRes
-  return $ Yield initRows (iter (initRes^.qJobReference) (initRes^.qPageToken))
+  pure $ Yield initRows (iter (initRes^.qJobReference) (initRes^.qPageToken))
   where iter (Just jr) pt@(Just _) = MachineT $ do
           res <- send (jobsGetQueryResults (jr^.jrJobId.non "") (jr^.jrProjectId.non "") & jgqrPageToken .~ pt)
-          return $ Yield (extractRowsAsJson gqrrRows res) (iter (Just jr) (res^.gqrrPageToken))
-        iter _         _           = MachineT $ return Stop
+          pure $ Yield (extractRowsAsJson gqrrRows res) (iter (Just jr) (res^.gqrrPageToken))
+        iter _         _           = MachineT $ pure Stop
 
 -- | Build a standard SQL request for use in stdSqlRequest
 mkStdSqlRequest

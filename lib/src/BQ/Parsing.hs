@@ -6,7 +6,8 @@
 module BQ.Parsing where
 
 import           BQ.Types.BigQuery (BigQueryRow)
-import           Data.Aeson        (Result, Value)
+import           Data.Aeson        (Result (..), Value)
+import           Data.Machine      (Is, MachineT, await, construct, stop, yield)
 import           Data.Maybe        (fromMaybe)
 import           Data.Proxy        (Proxy (..))
 import           Generics.SOP      (All, Code, Generic, NS (..), SOP (..),
@@ -29,4 +30,16 @@ parseBigQueryColumns vs =
    fmap (to . SOP . Z) <$>
     hctraverse (Proxy @BigQueryColumnParser) (parseCol . unK) <$>
      fromList vs
+
+parseRows
+  :: ( Generic a
+     , Code a ~ '[xs]
+     , All BigQueryColumnParser xs
+     , Monad m )
+  => MachineT m (Is BigQueryRow) a
+parseRows = construct $ do
+  bqr <- await
+  case parseBigQueryColumns bqr of
+    Success x -> yield x
+    Error   _ -> stop
 

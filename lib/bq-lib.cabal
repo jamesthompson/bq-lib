@@ -3,7 +3,7 @@ version:             0.1.0.0
 synopsis:            Assorted helper utilities for BigQuery
 description:         Assorted helper utilities for BigQuery, inc. parsers, querying, paging results
 homepage:            https://github.com/jamesthompson/bq-lib
-license:             AllRightsReserved
+license:             BSD3
 license-file:        LICENSE
 author:              James R. Thompson
 maintainer:          jamesthompsonoxford@gmail.com

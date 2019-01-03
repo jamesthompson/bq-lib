@@ -14,7 +14,10 @@ extra-source-files:  CHANGELOG.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:   BigQuery
+  exposed-modules:   BQ.Effects
+                     BQ.Types.BigQuery
+                     BQ.Types.Text1
+                     BQ.Parsing
   build-depends:     base >=4.11 && <5
                    , aeson
                    , generics-sop

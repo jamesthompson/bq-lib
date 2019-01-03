@@ -1,14 +1,12 @@
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE DeriveGeneric       #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications    #-}
-{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE DataKinds         #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE TypeFamilies      #-}
 
-module BigQuery where
+module BQ.Effects where
 
+import           BQ.Types.BigQuery                                     (BigQueryRow)
 import           Control.Lens                                          (Lens',
                                                                         non,
                                                                         toListOf,
@@ -19,21 +17,10 @@ import           Control.Lens                                          (Lens',
                                                                         (<&>),
                                                                         (?~),
                                                                         (^.))
-import           Data.Aeson                                            (Result,
-                                                                        Value)
 import           Data.Machine                                          hiding
                                                                         (Z)
-import           Data.Maybe                                            (fromMaybe)
 import           Data.Proxy                                            (Proxy (..))
 import           Data.Text                                             (Text)
-import           Generics.SOP                                          (All,
-                                                                        Code,
-                                                                        Generic,
-                                                                        NS (..),
-                                                                        SOP (..),
-                                                                        fromList,
-                                                                        hctraverse,
-                                                                        to, unK)
 import           Network.Google                                        (HasScope,
                                                                         LogLevel (Debug),
                                                                         MonadGoogle,
@@ -73,9 +60,6 @@ type BigQueryScope =
   '[ "https://www.googleapis.com/auth/bigquery"
    , "https://www.googleapis.com/auth/cloud-platform"
    , "https://www.googleapis.com/auth/cloud-platform.read-only" ]
-
--- | A BigQueryRow is a list of Maybe Value in Gogol
-type BigQueryRow = [Maybe Value]
 
 extractRowsAsJson
   :: Lens' a [TableRow]
@@ -123,22 +107,4 @@ testQuery projectName query = do
   lgr <- newLogger Debug stdout
   env <- newEnv <&> (envLogger .~ lgr) . (envScopes .~ (Proxy :: Proxy BigQueryScope))
   runResourceT . runGoogle env . runT $ stdSqlRequest projectName query
-
-
--- * Generic BigQuery Row to Product Type Parsing -------------------------------
-
-class BigQueryColumn a where
-  parseCol :: Maybe Value -> Result a
-
-parseBigQueryColumns
-  :: ( Generic a
-     , Code a ~ '[xs]
-     , All BigQueryColumn xs )
-  => BigQueryRow
-  -> Result a
-parseBigQueryColumns vs =
-  fromMaybe (fail ("Unexpected column data in row: " ++ show vs)) $
-   fmap (to . SOP . Z) <$>
-    hctraverse (Proxy @BigQueryColumn) (parseCol . unK) <$>
-     fromList vs
 

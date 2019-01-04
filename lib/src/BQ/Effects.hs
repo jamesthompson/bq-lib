@@ -2,13 +2,14 @@
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
+{-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE TypeFamilies      #-}
 
 module BQ.Effects where
 
 import           BQ.Types.BigQuery                                     (BigQueryRow)
-import           Control.Lens                                          (Lens',
-                                                                        non,
+import           Control.Lens                                          (non,
+                                                                        to,
                                                                         toListOf,
                                                                         traverse,
                                                                         view,
@@ -31,9 +32,7 @@ import           Network.Google                                        (HasScope
                                                                         runGoogle,
                                                                         runResourceT,
                                                                         send)
-import           Network.Google.BigQuery.Types                         (QueryRequest,
-                                                                        TableRow,
-                                                                        gqrrPageToken,
+import           Network.Google.BigQuery.Types                         (gqrrPageToken,
                                                                         gqrrRows,
                                                                         jrJobId,
                                                                         jrProjectId,
@@ -61,50 +60,39 @@ type BigQueryScope =
    , "https://www.googleapis.com/auth/cloud-platform"
    , "https://www.googleapis.com/auth/cloud-platform.read-only" ]
 
-extractRowsAsJson
-  :: Lens' a [TableRow]
-  -> a
-  -> [BigQueryRow]
-extractRowsAsJson tableRowsExtractionLens =
-  fmap (fmap (view tcV)) . toListOf (tableRowsExtractionLens . traverse . trF)
-
 -- | Machines source for for the given project id and query from the BigQuery API
 stdSqlRequest
   :: ( MonadGoogle BigQueryScope m,
        HasScope BigQueryScope JobsQuery)
   => Text
-  -- ^ GCP Project Name
+  -- ^ GCP Project Id
   -> Text
   -- ^ Query SQL
   -> SourceT m BigQueryRow
 stdSqlRequest projectId sql = (flattened <~) . MachineT $ do
-  initRes <- send (jobsQuery (mkStdSqlRequest sql) projectId)
-  let initRows = extractRowsAsJson qRows initRes
+  initRes <- send (jobsQuery assembledQueryReq projectId)
+  let initRows = initRes^.bqRows qRows
   pure $ Yield initRows (iter (initRes^.qJobReference) (initRes^.qPageToken))
-  where iter (Just jr) pt@(Just _) = MachineT $ do
+  where assembledQueryReq =
+          queryRequest & qrUseQueryCache .~ True
+                       & qrUseLegacySQL  .~ False
+                       & qrQuery         ?~ sql
+        bqRows tableRowsGetter =
+          to $ fmap (fmap (view tcV)) . toListOf (tableRowsGetter . traverse . trF)
+        iter (Just jr) pt@(Just _) = MachineT $ do
           res <- send (jobsGetQueryResults (jr^.jrJobId.non "") (jr^.jrProjectId.non "") & jgqrPageToken .~ pt)
-          pure $ Yield (extractRowsAsJson gqrrRows res) (iter (Just jr) (res^.gqrrPageToken))
+          pure $ Yield (res^.bqRows gqrrRows) (iter (Just jr) (res^.gqrrPageToken))
         iter _         _           = MachineT $ pure Stop
 
--- | Build a standard SQL request for use in stdSqlRequest
-mkStdSqlRequest
+-- | Utility function to test queries with debug logging in IO
+testDebugQuery
   :: Text
-  -- ^ Query SQL
-  -> QueryRequest
-mkStdSqlRequest sql =
-  queryRequest & qrUseQueryCache .~ True
-               & qrUseLegacySQL  .~ False
-               & qrQuery         ?~ sql
-
--- | Utility function to test queries
-testQuery
-  :: Text
-    -- ^ GCP Project Name
+    -- ^ GCP Project Id
   -> Text
     -- ^ Query SQL
   -> IO [BigQueryRow]
-testQuery projectName query = do
+testDebugQuery projectId sql = do
   lgr <- newLogger Debug stdout
-  env <- newEnv <&> (envLogger .~ lgr) . (envScopes .~ (Proxy :: Proxy BigQueryScope))
-  runResourceT . runGoogle env . runT $ stdSqlRequest projectName query
+  env <- newEnv <&> (envLogger .~ lgr) . (envScopes .~ (Proxy @BigQueryScope))
+  runResourceT . runGoogle env . runT $ stdSqlRequest projectId sql
 

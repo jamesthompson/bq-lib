@@ -60,7 +60,7 @@ type BigQueryScope =
    , "https://www.googleapis.com/auth/cloud-platform"
    , "https://www.googleapis.com/auth/cloud-platform.read-only" ]
 
--- | Machines source for for the given project id and query from the BigQuery API
+-- | Machines source for the given project id and query from the BigQuery API
 stdSqlRequest
   :: ( MonadGoogle BigQueryScope m,
        HasScope BigQueryScope JobsQuery)

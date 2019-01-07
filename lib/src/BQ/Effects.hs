@@ -7,48 +7,50 @@
 
 module BQ.Effects where
 
-import BQ.Types.BigQuery                                     (BigQueryRow)
-import Control.Lens.Fold                                     (toListOf)
-import Control.Lens.Getter                                   (to,
-                                                              view,
-                                                              (^.))
-import Control.Lens.Iso                                      (non)
-import Control.Lens.Setter                                   ((.~),
-                                                              (?~))
-import Data.Function                                         ((&))
-import Data.Functor                                          ((<&>))
-import Data.Machine                                          hiding (Z)
-import Data.Proxy                                            (Proxy (..))
-import Data.Text                                             (Text)
-import Data.Traversable                                      (traverse)
-import Network.Google                                        (HasScope,
-                                                              LogLevel (Debug),
-                                                              MonadGoogle,
-                                                              envLogger,
-                                                              envScopes,
-                                                              newEnv,
-                                                              newLogger,
-                                                              runGoogle,
-                                                              runResourceT,
-                                                              send)
-import Network.Google.BigQuery.Types                         (gqrrPageToken,
-                                                              gqrrRows,
-                                                              jrJobId,
-                                                              jrProjectId,
-                                                              qJobReference,
-                                                              qPageToken,
-                                                              qRows,
-                                                              qrQuery,
-                                                              qrUseLegacySQL,
-                                                              qrUseQueryCache,
-                                                              queryRequest,
-                                                              tcV,
-                                                              trF)
-import Network.Google.Resource.BigQuery.Jobs.GetQueryResults (jgqrPageToken,
-                                                              jobsGetQueryResults)
-import Network.Google.Resource.BigQuery.Jobs.Query           (JobsQuery,
-                                                              jobsQuery)
-import System.IO                                             (stdout)
+import           BQ.Types.BigQuery                                     (BigQueryRow)
+import           Control.Lens.Fold                                     (toListOf)
+import           Control.Lens.Getter                                   (to,
+                                                                        view,
+                                                                        (^.))
+import           Control.Lens.Iso                                      (non)
+import           Control.Lens.Setter                                   ((.~),
+                                                                        (?~))
+import           Data.Function                                         ((&))
+import           Data.Functor                                          ((<&>))
+import           Data.Machine                                          hiding
+                                                                        (Z)
+import           Data.Proxy                                            (Proxy (..))
+import           Data.Text                                             (Text)
+import           Data.Traversable                                      (traverse)
+import           Network.Google                                        (Google,
+                                                                        HasScope,
+                                                                        LogLevel (Debug),
+                                                                        MonadGoogle,
+                                                                        envLogger,
+                                                                        envScopes,
+                                                                        newEnv,
+                                                                        newLogger,
+                                                                        runGoogle,
+                                                                        runResourceT,
+                                                                        send)
+import           Network.Google.BigQuery.Types                         (gqrrPageToken,
+                                                                        gqrrRows,
+                                                                        jrJobId,
+                                                                        jrProjectId,
+                                                                        qJobReference,
+                                                                        qPageToken,
+                                                                        qRows,
+                                                                        qrQuery,
+                                                                        qrUseLegacySQL,
+                                                                        qrUseQueryCache,
+                                                                        queryRequest,
+                                                                        tcV,
+                                                                        trF)
+import           Network.Google.Resource.BigQuery.Jobs.GetQueryResults (jgqrPageToken,
+                                                                        jobsGetQueryResults)
+import           Network.Google.Resource.BigQuery.Jobs.Query           (JobsQuery,
+                                                                        jobsQuery)
+import           System.IO                                             (stdout)
 
 
 -- * Gogol / BigQuery Machinery -------------------------------------------------
@@ -62,7 +64,7 @@ type BigQueryScope =
 -- | Machines source for the given project id and query from the BigQuery API
 stdSqlRequest
   :: ( MonadGoogle BigQueryScope m,
-       HasScope BigQueryScope JobsQuery)
+       HasScope BigQueryScope JobsQuery )
   => Text
   -- ^ GCP Project Id
   -> Text
@@ -96,4 +98,13 @@ testDebugQuery projectId sql = do
   lgr <- newLogger Debug stdout
   env <- newEnv <&> (envLogger .~ lgr) . (envScopes .~ (Proxy @BigQueryScope))
   runResourceT . runGoogle env . runT $ stdSqlRequest projectId sql
+
+-- | Runs any machine outputting a list - logging at debug level
+runQueryMachine
+  :: MachineT (Google BigQueryScope) (Is a) b
+  -> IO [b]
+runQueryMachine machine = do
+  lgr <- newLogger Debug stdout
+  env <- newEnv <&> (envLogger .~ lgr) . (envScopes .~ (Proxy @BigQueryScope))
+  runResourceT . runGoogle env $ runT machine
 

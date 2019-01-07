@@ -7,15 +7,17 @@ module BQ.Types.Text1
   , _Text1
   ) where
 
-import           BQ.Parsing         (BigQueryColumnParser (..))
-import           Control.Lens.Fold  (preview)
-import           Control.Lens.Prism (Prism', prism')
-import           Control.Monad.Fail (MonadFail)
-import           Data.Aeson         (FromJSON (..), Value (Null, String))
-import           Data.Maybe         (maybe)
-import           Data.Text          (Text)
-import qualified Data.Text          as T
-import           GHC.Generics       (Generic)
+import           BQ.Parsing          (BigQueryColumnParser (..))
+import           Control.Lens.Fold   (preview)
+import           Control.Lens.Prism  (Prism', prism')
+import           Control.Lens.Review (review)
+import           Control.Monad.Fail  (MonadFail)
+import           Data.Aeson          (FromJSON (..), ToJSON (..),
+                                      Value (Null, String))
+import           Data.Maybe          (maybe)
+import           Data.Text           (Text)
+import qualified Data.Text           as T
+import           GHC.Generics        (Generic)
 
 
 data Text1
@@ -42,6 +44,9 @@ instance FromJSON Text1 where
   parseJSON (String t) =
     maybe text1NullError pure (preview _Text1 t)
   parseJSON _          = text1TypeError
+
+instance ToJSON Text1 where
+  toJSON = String . review _Text1
 
 instance {-# OVERLAPPING #-} FromJSON (Maybe Text1) where
   parseJSON (String t) =

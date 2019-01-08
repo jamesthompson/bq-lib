@@ -53,3 +53,17 @@ parseRows = construct $ do
     Success x -> yield x
     Error   _ -> stop
 
+-- | Row parsing machine, stops if a failing row is encountered
+--   Requires `Result` parameterized BigQueryColumnParser instances
+parseRowsEither
+  :: ( Generic a
+     , Code a ~ '[xs]
+     , All (BigQueryColumnParser Result) xs
+     , Monad m )
+  => MachineT m (Is BigQueryRow) (Either String a)
+parseRowsEither = construct $ do
+  bqr <- await
+  case parseBigQueryColumns bqr of
+    Success x -> yield (Right x)
+    Error   y -> yield (Left y)
+

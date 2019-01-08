@@ -10,7 +10,7 @@ module BQ.Parsing where
 import           BQ.Types.BigQuery  (BigQueryRow)
 import           Control.Monad.Fail (MonadFail)
 import           Data.Aeson         (Result (..), Value)
-import           Data.Machine       (Is, MachineT, await, construct, stop,
+import           Data.Machine       (Is, MachineT, await, repeatedly, stop,
                                      yield)
 import           Data.Maybe         (fromMaybe)
 import           Data.Proxy         (Proxy (..))
@@ -47,7 +47,7 @@ parseRows
      , All (BigQueryColumnParser Result) xs
      , Monad m )
   => MachineT m (Is BigQueryRow) a
-parseRows = construct $ do
+parseRows = repeatedly $ do
   bqr <- await
   case parseBigQueryColumns bqr of
     Success x -> yield x
@@ -61,7 +61,7 @@ parseRowsEither
      , All (BigQueryColumnParser Result) xs
      , Monad m )
   => MachineT m (Is BigQueryRow) (Either String a)
-parseRowsEither = construct $ do
+parseRowsEither = repeatedly $ do
   bqr <- await
   case parseBigQueryColumns bqr of
     Success x -> yield (Right x)

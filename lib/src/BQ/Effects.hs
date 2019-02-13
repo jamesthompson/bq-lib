@@ -61,7 +61,8 @@ import           Network.Google.Resource.BigQuery.Jobs.GetQueryResults (jgqrPage
                                                                         jobsGetQueryResults)
 import           Network.Google.Resource.BigQuery.Jobs.Query           (JobsQuery,
                                                                         jobsQuery)
-import           Network.Google.Resource.BigQuery.TableData.InsertAll  (tableDataInsertAll)
+import           Network.Google.Resource.BigQuery.TableData.InsertAll  (TableDataInsertAll,
+                                                                        tableDataInsertAll)
 import           System.IO                                             (stdout)
 
 
@@ -70,6 +71,7 @@ import           System.IO                                             (stdout)
 -- | Gogol Scope
 type BigQueryScope =
   '[ "https://www.googleapis.com/auth/bigquery"
+   , "https://www.googleapis.com/auth/bigquery.insertdata"
    , "https://www.googleapis.com/auth/cloud-platform"
    , "https://www.googleapis.com/auth/cloud-platform.read-only" ]
 
@@ -101,7 +103,7 @@ stdSqlRequest projectId sql = (flattened <~) . MachineT $ do
 
 writeRowsToTable
   :: ( MonadGoogle BigQueryScope m,
-       HasScope BigQueryScope JobsQuery )
+       HasScope BigQueryScope TableDataInsertAll )
   => (a -> HM.HashMap Text Value)
   -- ^ Row serialization function
   -> Text
@@ -117,7 +119,8 @@ writeRowsToTable toBQRow projectId datasetId tableId = autoM $ \rows -> do
                                datasetId
                                projectId
                                tableId
-  _ <- send req
+  res <- send req
+  liftIO $ print res
   return ()
   where mkRow a = (\u -> tableDataInsertAllRequestRowsItem & tdiarriJSON ?~ jsonObject (toBQRow a)
                                                            & tdiarriInsertId ?~ toText u) <$> nextRandom

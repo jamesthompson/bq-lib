@@ -15,13 +15,18 @@ import           Control.Lens.Getter                                   (to,
 import           Control.Lens.Iso                                      (non)
 import           Control.Lens.Setter                                   ((.~),
                                                                         (?~))
+import           Control.Monad.IO.Class                                (liftIO)
+import           Data.Aeson                                            (Value)
 import           Data.Function                                         ((&))
 import           Data.Functor                                          ((<&>))
+import qualified Data.HashMap.Lazy                                     as HM
 import           Data.Machine                                          hiding
                                                                         (Z)
 import           Data.Proxy                                            (Proxy (..))
 import           Data.Text                                             (Text)
 import           Data.Traversable                                      (traverse)
+import           Data.UUID                                             (toText)
+import           Data.UUID.V4                                          (nextRandom)
 import           Network.Google                                        (Google,
                                                                         HasScope,
                                                                         LogLevel (Debug),
@@ -37,6 +42,7 @@ import           Network.Google.BigQuery.Types                         (gqrrPage
                                                                         gqrrRows,
                                                                         jrJobId,
                                                                         jrProjectId,
+                                                                        jsonObject,
                                                                         qJobReference,
                                                                         qPageToken,
                                                                         qRows,
@@ -44,12 +50,18 @@ import           Network.Google.BigQuery.Types                         (gqrrPage
                                                                         qrUseLegacySQL,
                                                                         qrUseQueryCache,
                                                                         queryRequest,
+                                                                        tableDataInsertAllRequest,
+                                                                        tableDataInsertAllRequestRowsItem,
                                                                         tcV,
+                                                                        tdiarRows,
+                                                                        tdiarriInsertId,
+                                                                        tdiarriJSON,
                                                                         trF)
 import           Network.Google.Resource.BigQuery.Jobs.GetQueryResults (jgqrPageToken,
                                                                         jobsGetQueryResults)
 import           Network.Google.Resource.BigQuery.Jobs.Query           (JobsQuery,
                                                                         jobsQuery)
+import           Network.Google.Resource.BigQuery.TableData.InsertAll  (tableDataInsertAll)
 import           System.IO                                             (stdout)
 
 
@@ -86,6 +98,29 @@ stdSqlRequest projectId sql = (flattened <~) . MachineT $ do
                        jgqrPageToken .~ pt)
           pure $ Yield (res^.bqRows gqrrRows) (iter (Just jr) (res^.gqrrPageToken))
         iter _         _           = MachineT $ pure Stop
+
+writeRowsToTable
+  :: ( MonadGoogle BigQueryScope m,
+       HasScope BigQueryScope JobsQuery )
+  => (a -> HM.HashMap Text Value)
+  -- ^ Row serialization function
+  -> Text
+  -- ^ Project ID
+  -> Text
+  -- ^ Dataset ID
+  -> Text
+  -- ^ Table ID
+  -> MachineT m (Is [a]) ()
+writeRowsToTable toBQRow projectId datasetId tableId = autoM $ \rows -> do
+  items <- liftIO $ traverse mkRow rows
+  let req = tableDataInsertAll (tableDataInsertAllRequest & tdiarRows .~ items)
+                               datasetId
+                               projectId
+                               tableId
+  _ <- send req
+  return ()
+  where mkRow a = (\u -> tableDataInsertAllRequestRowsItem & tdiarriJSON ?~ jsonObject (toBQRow a)
+                                                           & tdiarriInsertId ?~ toText u) <$> nextRandom
 
 -- | Utility function to test queries with debug logging in IO
 testDebugQuery

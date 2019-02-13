@@ -27,7 +27,7 @@ library
                    , gogol-bigquery
                    , lens
                    , machines
-                   , string-qq
+                   , neat-interpolation
                    , text
                    , unordered-containers
                    , uuid

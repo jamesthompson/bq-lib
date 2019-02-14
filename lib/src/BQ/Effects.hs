@@ -37,7 +37,8 @@ import           Network.Google                                        (Google,
                                                                         newLogger,
                                                                         runGoogle,
                                                                         runResourceT,
-                                                                        send)
+                                                                        send,
+                                                                        timeout)
 import           Network.Google.BigQuery.Types                         (gqrrPageToken,
                                                                         gqrrRows,
                                                                         jrJobId,
@@ -144,5 +145,5 @@ runQueryMachine
 runQueryMachine machine = do
   lgr <- newLogger Debug stdout
   env <- newEnv <&> (envLogger .~ lgr) . (envScopes .~ (Proxy @BigQueryScope))
-  runResourceT . runGoogle env $ runT machine
+  runResourceT. runGoogle env . timeout 300 $ runT machine
 

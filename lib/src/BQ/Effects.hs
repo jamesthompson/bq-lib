@@ -39,15 +39,20 @@ import           Network.Google                                        (Google,
                                                                         runResourceT,
                                                                         send,
                                                                         timeout)
-import           Network.Google.BigQuery.Types                         (gqrrPageToken,
+import           Network.Google.BigQuery.Types                         (gqrrErrors,
+                                                                        gqrrJobComplete,
+                                                                        gqrrPageToken,
                                                                         gqrrRows,
+                                                                        gqrrTotalRows,
                                                                         jrJobId,
                                                                         jrProjectId,
                                                                         jsonObject,
+                                                                        qErrors,
                                                                         qJobReference,
                                                                         qPageToken,
                                                                         qRows,
                                                                         qrQuery,
+                                                                        qrTimeoutMs,
                                                                         qrUseLegacySQL,
                                                                         qrUseQueryCache,
                                                                         queryRequest,
@@ -87,20 +92,28 @@ stdSqlRequest
   -> SourceT m BigQueryRow
 stdSqlRequest projectId sql = (flattened <~) . MachineT $ do
   initRes <- send (jobsQuery assembledQueryReq projectId)
+  liftIO $ print (initRes^.qErrors)
   let initRows = initRes^.bqRows qRows
   pure $ Yield initRows (iter (initRes^.qJobReference) (initRes^.qPageToken))
   where assembledQueryReq =
           queryRequest & qrUseQueryCache .~ True
                        & qrUseLegacySQL  .~ False
                        & qrQuery         ?~ sql
+                       & qrTimeoutMs     ?~ 300000
         bqRows tableRowsGetter =
           to $ fmap (fmap (view tcV)) . toListOf (tableRowsGetter . traverse . trF)
         iter (Just jr) pt@(Just _) = MachineT $ do
           res <- send (jobsGetQueryResults (jr^.jrJobId.non "")
                                            (jr^.jrProjectId.non "") &
                        jgqrPageToken .~ pt)
+          liftIO . print $ "Total row count: " <> show (res^.gqrrTotalRows) <>
+                          ", errors: " <> show (res^.gqrrErrors) <>
+                          ", job complete? " <> show (res^.gqrrJobComplete)
           pure $ Yield (res^.bqRows gqrrRows) (iter (Just jr) (res^.gqrrPageToken))
-        iter _         _           = MachineT $ pure Stop
+        iter x         y           = MachineT $ do
+          liftIO $ print x
+          liftIO $ print y
+          pure Stop
 
 writeRowsToTable
   :: ( MonadGoogle BigQueryScope m,
